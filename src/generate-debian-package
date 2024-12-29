@@ -1,45 +1,45 @@
 #!/bin/bash
 
-# Funzione ricorsiva per leggere tutti i file e le cartelle dentro src
+# Recursive function to read all files and folders inside src
 write_install_entries() {
     local current_dir=$1
     local base_dir=$2
 
     for file in "$current_dir"/*; do
         if [ -d "$file" ]; then
-            # Se è una cartella, chiama la funzione ricorsivamente
+            # If it is a folder, call the function recursively
             write_install_entries "$file" "$base_dir"
         else
-            # Se è un file, scrive il percorso nel file install
+            # If it is a file, write the path to the install file
             relative_path="${file#$base_dir/}"
             echo "src/$relative_path usr/bin" >>"$directoryName/$debian/install"
         fi
     done
 }
 
-# BUILD PACKAGE AUTOMATICO
-echo "Vuoi buildare il pacchetto automatico? (yY/n)"
+# AUTOMATIC PACKAGE BUILDER
+echo "Do you want to build the package automatically? (yY/n)"
 read answer
 
 if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
-    echo "verifica se esiste il file env"
+    echo "Checking if the env file exists"
     if [ -f "env" ]; then
-        echo "file env esiste"
-        echo "lettura file env"
+        echo "env file exists"
+        echo "Reading env file"
         debian="debian"
         packageName=$(sed -n 's/^package-name=//p' env | tr -d '\r')
         version=$(sed -n 's/^version=//p' env | tr -d '\r')
         directoryName="ppa/${packageName}.${version}"
 
-        # Controlla se esiste già una cartella chiamata $directoryName
+        # Checks whether a folder named $directoryName already exists.
         if [ -d "$directoryName" ]; then
-            echo "La cartella $directoryName esiste già. Vuoi cancellarla? (y/n)"
+            echo "The folder $directoryName already exists. Do you want to delete it? (y/n)"
             read deleteAnswer
             if [ "$deleteAnswer" == "y" ]; then
                 rm -rf "$directoryName"
-                echo "Cartella $directoryName cancellata."
+                echo "Folder $directoryName deleted."
             else
-                echo "Operazione annullata."
+                echo "Operation canceled."
                 exit 1
             fi
         fi
@@ -53,16 +53,16 @@ if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
         if [ -n "$packageName" ] && [ -n "$version" ] && [ -n "$author" ] && [ -n "$email" ] && [ -n "$description" ]; then
             echo "packageName: $packageName"
             echo "version: $version"
-            echo "crea la cartella $directoryName"
+            echo "Creating the folder $directoryName"
             mkdir -p "$directoryName/$debian/"
-            # Verifica e copia i file nella cartella $debian
+            # Verify and copy the files to the $debian folder
             for file in compat rules control postinst preinstal install copyright; do
                 if [ -f "$file" ]; then
-                    echo "Copia $file nella cartella $debian"
+                    echo "Copying $file into the $debian folder"
                     cp "$file" "$directoryName/$debian/"
                 elif [[ "$file" == "compat" || "$file" == "rules" || "$file" == "control" || "$file" == "copyright" ]]; then
-                    # Crea i file con contenuti di default se non esistono
-                    echo "Crea $file con contenuti di default"
+                    # Creating $file with default contents if it does not exist
+                    echo "Creating $file with default contents"
                     case "$file" in
                     compat)
                         echo "12" >>"$directoryName/$debian/$file"
@@ -117,13 +117,13 @@ License: MIT
                 fi
             done
 
-            # Crea il file changeLog
+            # Creating the changelog file
             distribution=$(grep -E '^distribution=' env | cut -d'=' -f2 | tr -d '\r')
             mainChange=$(grep -E '^mainChange=' env | cut -d'=' -f2 | tr -d '\r')
             minorChange=$(grep -E '^minorChange=' env | cut -d'=' -f2 | tr -d '\r')
 
             if [ -n "$distribution" ] && [ -n "$mainChange" ]; then
-                echo "Crea il file changelog"
+                echo "Creating the changelog file"
                 echo "$packageName ($version) $distribution; urgency=low" >"$directoryName/$debian/changelog"
                 echo "  * $mainChange" >>"$directoryName/$debian/changelog"
                 if [ -n "$minorChange" ]; then
@@ -131,7 +131,7 @@ License: MIT
                 fi
                 echo " -- $author <$email>  $(date -R)" >>"$directoryName/$debian/changelog"
             else
-                echo "Errore: una o più proprietà necessarie non sono presenti nel file env."
+                echo "Error: One or more required properties are missing from the env file."
                 echo "distribution: $distribution"
                 echo "mainChange: $mainChange"
                 echo "minorChange: $minorChange"
@@ -140,47 +140,47 @@ License: MIT
                 exit 1
             fi
 
-            # Verifica se esiste la cartella src
+            # Check if the src folder exists
             if [ -d "src" ]; then
-                echo "Copia la cartella src dentro {$packageName$version}"
+                echo "Copy the src folder into {$packageName$version}"
                 cp -r src "$directoryName/"
 
-                # Crea il file install se non esiste
+                # Create the install file if it does not exist
                 if [ ! -f "install" ]; then
-                    echo "Crea il file install"
+                    echo "Create the install file"
                     write_install_entries "src" "src"
                 fi
 
-                echo "Assegna i permessi ai file"
+                echo "Assigning permissions to the files"
                 chmod 0755 "$directoryName/$debian/postinst" "$directoryName/$debian/preinst" "$directoryName/$debian/rules" 2>/dev/null
                 chmod 0644 "$directoryName/$debian/control" "$directoryName/$debian/install" "$directoryName/$debian/compat"
                 chmod -R 755 "$directoryName/src/"
 
-                echo "Inserisci la chiave per lanciare la build:"
+                echo "Enter the key to launch the build:"
                 read key
                 cd "$directoryName" && debuild -S -sa -k"$key" && cd ..
 
-                echo "Vuoi fare il deploy su launchpad.net? (yY/n)"
+                echo "Do you want to deploy on launchpad.net? (yY/n)"
                 read deployAnswer
                 if [[ "$deployAnswer" == "y" || "$deployAnswer" == "Y" ]]; then
                     ppaPath=$(grep -E '^ppa-path=' env | cut -d'=' -f2 | tr -d '\r')
                     if [ -n "$ppaPath" ]; then
-                        echo "lancio comando: dput ppa:"$ppaPath" "${packageName}_${version}_source.changes""
+                        echo "launch command: dput ppa:"$ppaPath" "${packageName}_${version}_source.changes""
                         dput ppa:"$ppaPath" "${packageName}_${version}_source.changes"
-                        echo "Pacchetto caricato con successo."
+                        echo "Package successfully uploaded."
                     else
-                        echo "Errore: la proprietà ppa-path non è presente nel file env."
+                        echo "Error: ppa-path property is not present in the env file."
                         exit 1
                     fi
                 else
-                    echo "Deploy non eseguito."
+                    echo "Deploy not executed."
                 fi
             else
-                echo "Errore: la cartella src non esiste."
+                echo "Error: The src folder does not exist."
                 exit 1
             fi
         else
-            echo "Errore: una o più proprietà necessarie non sono presenti nel file env."
+            echo "Error: One or more required properties are missing from the env file."
             echo "package-name: $packageName"
             echo "version: $version"
             echo "author: $author"
@@ -189,39 +189,39 @@ License: MIT
             exit 1
         fi
     else
-        echo "Errore: il file env non esiste."
+        echo "Error: env file does not exist."
         exit 1
     fi
 else
     # Gestisce input non validi
-    echo "Risposta non valida. Riprova a eseguire lo script."
+    echo "Exiting."
 fi
 
 # BUILD PACKAGE MANUALE
-echo "Vuoi buildare il pacchetto manuale? (yY/n)"
+echo "Do you want to build the package manually? (yY/n)"
 read answer
 
 if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
-    # Verifica se esiste il file env
-    echo "verifica se esiste il file env"
+    # Checking if the env file exists
+    echo "Checking if the env file exists"
     if [ -f "env" ]; then
-        echo "file env esiste"
-        echo "lettura file env"
+        echo "env file exists"
+        echo "Reading env file"
         debian="DEBIAN"
-        # Legge le proprietà "package-name" e "version" dal file env
+        # Reads the “package-name” and “version” properties from the env file
         packageName=$(sed -n 's/^package-name=//p' env | tr -d '\r')
         version=$(sed -n 's/^version=//p' env | tr -d '\r')
         directoryName="manual/${packageName}.${version}"
 
-        # Controlla se esiste già una cartella chiamata $directoryName
+        # Checks whether a folder named $directoryName already exists.
         if [ -d "$directoryName" ]; then
-            echo "La cartella $directoryName esiste già. Vuoi cancellarla? (y/n)"
+            echo "The $directoryName folder already exists. Do you want to delete it? (y/n)"
             read deleteAnswer
             if [ "$deleteAnswer" == "y" ]; then
                 rm -rf "$directoryName"
-                echo "Cartella $directoryName cancellata."
+                echo "Folder $directoryName deleted."
             else
-                echo "Operazione annullata."
+                echo "Operation canceled."
                 exit 1
             fi
         fi
@@ -237,14 +237,14 @@ if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
             echo "version: $version"
             echo "crea la cartella $directoryName"
             mkdir -p "$directoryName/$debian/"
-            # Verifica e copia i file nella cartella $debian
+            # Verify and copy the files to the $debian folder
             for file in compat rules control postinst preinstal install copyright; do
                 if [ -f "$file" ]; then
-                    echo "Copia $file nella cartella $debian"
+                    echo "Copy $file into the $debian folder"
                     cp "$file" "$directoryName/$debian/"
                 elif [[ "$file" == "compat" || "$file" == "rules" || "$file" == "control" || "$file" == "copyright" ]]; then
-                    # Crea i file con contenuti di default se non esistono
-                    echo "Crea $file con contenuti di default"
+                    # Create files with default contents if they do not exist
+                    echo "Create $file with default contents"
                     case "$file" in
                     compat)
                         echo "12" >>"$directoryName/$debian/$file"
@@ -299,27 +299,25 @@ License: MIT
                 fi
             done
 
-            # Verifica se esiste la cartella src
+            # Check if the src folder exists
             if [ -d "src" ]; then
-                echo "Copia il contenuto della cartella src dentro ${directoryName}/usr/local/bin/"
+                echo "Copying the contents of the src folder into ${directoryName}/usr/local/bin/"
                 mkdir -p "$directoryName/usr/local/bin/"
-                # Copia il contenuto della cartella src dentro ${directoryName}/usr/local/bin/
                 cp -r src/* "$directoryName/usr/local/bin/"
 
-                echo "Assegna i permessi ai file"
-                # Assegna i permessi ai file
+                echo "Assigning permissions to the files"
                 chmod 0755 "$directoryName/$debian/postinst" "$directoryName/$debian/preinst" "$directoryName/$debian/rules" 2>/dev/null
                 chmod 0644 "$directoryName/$debian/control" "$directoryName/$debian/compat"
                 chmod -R 755 "$directoryName/usr/local/bin/"
-                #esegue la build
+                #execute the build
                 dpkg-deb --build $directoryName
 
             else
-                echo "Errore: la cartella src non esiste."
+                echo "Error: The src folder does not exist."
                 exit 1
             fi
         else
-            echo "Errore: una o più proprietà necessarie non sono presenti nel file env."
+            echo "Error: One or more required properties are missing from the env file."
             echo "package-name: $packageName"
             echo "version: $version"
             echo "author: $author"
@@ -328,12 +326,12 @@ License: MIT
             exit 1
         fi
     else
-        echo "Errore: il file env non esiste."
+        echo "Error: env file does not exist."
         exit 1
     fi
 elif [ "$answer" == "no" ]; then
-    echo "'no' selezionato. Uscita..."
+    echo "'no' selected. Exiting..."
 else
     # Gestisce input non validi
-    echo "Risposta non valida. Riprova a eseguire lo script."
+    echo "Exiting."
 fi
