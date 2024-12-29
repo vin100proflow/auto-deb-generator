@@ -1,0 +1,339 @@
+#!/bin/bash
+
+# Funzione ricorsiva per leggere tutti i file e le cartelle dentro src
+write_install_entries() {
+    local current_dir=$1
+    local base_dir=$2
+
+    for file in "$current_dir"/*; do
+        if [ -d "$file" ]; then
+            # Se è una cartella, chiama la funzione ricorsivamente
+            write_install_entries "$file" "$base_dir"
+        else
+            # Se è un file, scrive il percorso nel file install
+            relative_path="${file#$base_dir/}"
+            echo "src/$relative_path usr/bin" >>"$directoryName/$debian/install"
+        fi
+    done
+}
+
+# BUILD PACKAGE AUTOMATICO
+echo "Vuoi buildare il pacchetto automatico? (yY/n)"
+read answer
+
+if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+    echo "verifica se esiste il file env"
+    if [ -f "env" ]; then
+        echo "file env esiste"
+        echo "lettura file env"
+        debian="debian"
+        packageName=$(sed -n 's/^package-name=//p' env | tr -d '\r')
+        version=$(sed -n 's/^version=//p' env | tr -d '\r')
+        directoryName="ppa/${packageName}.${version}"
+
+        # Controlla se esiste già una cartella chiamata $directoryName
+        if [ -d "$directoryName" ]; then
+            echo "La cartella $directoryName esiste già. Vuoi cancellarla? (y/n)"
+            read deleteAnswer
+            if [ "$deleteAnswer" == "y" ]; then
+                rm -rf "$directoryName"
+                echo "Cartella $directoryName cancellata."
+            else
+                echo "Operazione annullata."
+                exit 1
+            fi
+        fi
+        author=$(sed -n 's/^author=//p' env | tr -d '\r')
+        email=$(sed -n 's/^author-email=//p' env | tr -d '\r')
+        description=$(sed -n 's/^description=//p' env | tr -d '\r')
+        depends=$(sed -n 's/^depends=//p' env | tr -d '\r')
+        homepage=$(sed -n 's/^homepage=//p' env | tr -d '\r')
+        upstreamName=$(sed -n 's/^upstream-name=//p' env | tr -d '\r')
+
+        if [ -n "$packageName" ] && [ -n "$version" ] && [ -n "$author" ] && [ -n "$email" ] && [ -n "$description" ]; then
+            echo "packageName: $packageName"
+            echo "version: $version"
+            echo "crea la cartella $directoryName"
+            mkdir -p "$directoryName/$debian/"
+            # Verifica e copia i file nella cartella $debian
+            for file in compat rules control postinst preinstal install copyright; do
+                if [ -f "$file" ]; then
+                    echo "Copia $file nella cartella $debian"
+                    cp "$file" "$directoryName/$debian/"
+                elif [[ "$file" == "compat" || "$file" == "rules" || "$file" == "control" || "$file" == "copyright" ]]; then
+                    # Crea i file con contenuti di default se non esistono
+                    echo "Crea $file con contenuti di default"
+                    case "$file" in
+                    compat)
+                        echo "12" >>"$directoryName/$debian/$file"
+                        ;;
+                    rules)
+                        echo "#!/usr/bin/make -f
+%:
+	dh \$@" >>"$directoryName/$debian/$file"
+                        ;;
+                    control)
+                        echo "Source: $packageName" >>"$directoryName/$debian/$file"
+                        echo "Section: utils" >>"$directoryName/$debian/$file"
+                        echo "Priority: optional" >>"$directoryName/$debian/$file"
+                        echo "Maintainer: $author <$email>" >>"$directoryName/$debian/$file"
+                        echo "Build-Depends: debhelper (>= 12)" >>"$directoryName/$debian/$file"
+                        echo "Standards-Version: 4.5.0" >>"$directoryName/$debian/$file"
+                        echo "Homepage: $homepage" >>"$directoryName/$debian/$file"
+                        echo "" >>"$directoryName/$debian/$file"
+                        echo "Package: $packageName" >>"$directoryName/$debian/$file"
+                        echo "Architecture: all" >>"$directoryName/$debian/$file"
+                        echo "Description: $description" >>"$directoryName/$debian/$file"
+                        ;;
+                    copyright)
+                        echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+                        echo "Upstream-Name: $upstreamName" >>"$directoryName/$debian/$file"
+                        echo "Source: $homepage" >>"$directoryName/$debian/$file"
+                        echo "Files: *
+Copyright: 2024 Vincent Legnani <vincent.legnani.biz@gmail.com>
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+" >>"$directoryName/$debian/$file"
+                        ;;
+                    esac
+                fi
+            done
+
+            # Crea il file changeLog
+            distribution=$(grep -E '^distribution=' env | cut -d'=' -f2 | tr -d '\r')
+            mainChange=$(grep -E '^mainChange=' env | cut -d'=' -f2 | tr -d '\r')
+            minorChange=$(grep -E '^minorChange=' env | cut -d'=' -f2 | tr -d '\r')
+
+            if [ -n "$distribution" ] && [ -n "$mainChange" ]; then
+                echo "Crea il file changelog"
+                echo "$packageName ($version) $distribution; urgency=low" >"$directoryName/$debian/changelog"
+                echo "  * $mainChange" >>"$directoryName/$debian/changelog"
+                if [ -n "$minorChange" ]; then
+                    echo "   - $minorChange" >>"$directoryName/$debian/changelog"
+                fi
+                echo " -- $author <$email>  $(date -R)" >>"$directoryName/$debian/changelog"
+            else
+                echo "Errore: una o più proprietà necessarie non sono presenti nel file env."
+                echo "distribution: $distribution"
+                echo "mainChange: $mainChange"
+                echo "minorChange: $minorChange"
+                echo "author: $author"
+                echo "email: $email"
+                exit 1
+            fi
+
+            # Verifica se esiste la cartella src
+            if [ -d "src" ]; then
+                echo "Copia la cartella src dentro {$packageName$version}"
+                cp -r src "$directoryName/"
+
+                # Crea il file install se non esiste
+                if [ ! -f "install" ]; then
+                    echo "Crea il file install"
+                    write_install_entries "src" "src"
+                fi
+
+                echo "Assegna i permessi ai file"
+                chmod 0755 "$directoryName/$debian/postinst" "$directoryName/$debian/preinst" "$directoryName/$debian/rules" 2>/dev/null
+                chmod 0644 "$directoryName/$debian/control" "$directoryName/$debian/install" "$directoryName/$debian/compat"
+                chmod -R 755 "$directoryName/src/"
+
+                echo "Inserisci la chiave per lanciare la build:"
+                read key
+                cd "$directoryName" && debuild -S -sa -k"$key" && cd ..
+
+                echo "Vuoi fare il deploy su launchpad.net? (yY/n)"
+                read deployAnswer
+                if [[ "$deployAnswer" == "y" || "$deployAnswer" == "Y" ]]; then
+                    ppaPath=$(grep -E '^ppa-path=' env | cut -d'=' -f2 | tr -d '\r')
+                    if [ -n "$ppaPath" ]; then
+                        echo "lancio comando: dput ppa:"$ppaPath" "${packageName}_${version}_source.changes""
+                        dput ppa:"$ppaPath" "${packageName}_${version}_source.changes"
+                        echo "Pacchetto caricato con successo."
+                    else
+                        echo "Errore: la proprietà ppa-path non è presente nel file env."
+                        exit 1
+                    fi
+                else
+                    echo "Deploy non eseguito."
+                fi
+            else
+                echo "Errore: la cartella src non esiste."
+                exit 1
+            fi
+        else
+            echo "Errore: una o più proprietà necessarie non sono presenti nel file env."
+            echo "package-name: $packageName"
+            echo "version: $version"
+            echo "author: $author"
+            echo "email: $email"
+            echo "description: $description"
+            exit 1
+        fi
+    else
+        echo "Errore: il file env non esiste."
+        exit 1
+    fi
+else
+    # Gestisce input non validi
+    echo "Risposta non valida. Riprova a eseguire lo script."
+fi
+
+# BUILD PACKAGE MANUALE
+echo "Vuoi buildare il pacchetto manuale? (yY/n)"
+read answer
+
+if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+    # Verifica se esiste il file env
+    echo "verifica se esiste il file env"
+    if [ -f "env" ]; then
+        echo "file env esiste"
+        echo "lettura file env"
+        debian="DEBIAN"
+        # Legge le proprietà "package-name" e "version" dal file env
+        packageName=$(sed -n 's/^package-name=//p' env | tr -d '\r')
+        version=$(sed -n 's/^version=//p' env | tr -d '\r')
+        directoryName="manual/${packageName}.${version}"
+
+        # Controlla se esiste già una cartella chiamata $directoryName
+        if [ -d "$directoryName" ]; then
+            echo "La cartella $directoryName esiste già. Vuoi cancellarla? (y/n)"
+            read deleteAnswer
+            if [ "$deleteAnswer" == "y" ]; then
+                rm -rf "$directoryName"
+                echo "Cartella $directoryName cancellata."
+            else
+                echo "Operazione annullata."
+                exit 1
+            fi
+        fi
+        author=$(sed -n 's/^author=//p' env | tr -d '\r')
+        email=$(sed -n 's/^author-email=//p' env | tr -d '\r')
+        description=$(sed -n 's/^description=//p' env | tr -d '\r')
+        depends=$(sed -n 's/^depends=//p' env | tr -d '\r')
+        homepage=$(sed -n 's/^homepage=//p' env | tr -d '\r')
+        upstreamName=$(sed -n 's/^upstream-name=//p' env | tr -d '\r')
+
+        if [ -n "$packageName" ] && [ -n "$version" ] && [ -n "$author" ] && [ -n "$email" ] && [ -n "$description" ]; then
+            echo "packageName: $packageName"
+            echo "version: $version"
+            echo "crea la cartella $directoryName"
+            mkdir -p "$directoryName/$debian/"
+            # Verifica e copia i file nella cartella $debian
+            for file in compat rules control postinst preinstal install copyright; do
+                if [ -f "$file" ]; then
+                    echo "Copia $file nella cartella $debian"
+                    cp "$file" "$directoryName/$debian/"
+                elif [[ "$file" == "compat" || "$file" == "rules" || "$file" == "control" || "$file" == "copyright" ]]; then
+                    # Crea i file con contenuti di default se non esistono
+                    echo "Crea $file con contenuti di default"
+                    case "$file" in
+                    compat)
+                        echo "12" >>"$directoryName/$debian/$file"
+                        ;;
+                    rules)
+                        echo "#!/usr/bin/make -f
+%:
+	dh \$@" >>"$directoryName/$debian/$file"
+                        ;;
+                    control)
+                        echo "Source: $packageName" >>"$directoryName/$debian/$file"
+                        echo "Version: $version" >>"$directoryName/$debian/$file"
+                        echo "Section: utils" >>"$directoryName/$debian/$file"
+                        echo "Priority: optional" >>"$directoryName/$debian/$file"
+                        echo "Maintainer: $author <$email>" >>"$directoryName/$debian/$file"
+                        echo "Build-Depends: debhelper (>= 12)" >>"$directoryName/$debian/$file"
+                        echo "Standards-Version: 4.5.0" >>"$directoryName/$debian/$file"
+                        echo "Homepage: $homepage" >>"$directoryName/$debian/$file"
+                        echo "Package: $packageName" >>"$directoryName/$debian/$file"
+                        echo "Architecture: all" >>"$directoryName/$debian/$file"
+                        echo "Description: $description" >>"$directoryName/$debian/$file"
+                        ;;
+                    copyright)
+                        echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+                        echo "Upstream-Name: $upstreamName" >>"$directoryName/$debian/$file"
+                        echo "Source: $homepage" >>"$directoryName/$debian/$file"
+                        echo "Files: *
+Copyright: 2024 Vincent Legnani <vincent.legnani.biz@gmail.com>
+License: MIT
+
+License: MIT
+ Permission is hereby granted, free of charge, to any person obtaining a copy
+ of this software and associated documentation files (the "Software"), to deal
+ in the Software without restriction, including without limitation the rights
+ to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ copies of the Software, and to permit persons to whom the Software is
+ furnished to do so, subject to the following conditions:
+ .
+ The above copyright notice and this permission notice shall be included in all
+ copies or substantial portions of the Software.
+ .
+ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ SOFTWARE.
+" >>"$directoryName/$debian/$file"
+                        ;;
+                    esac
+                fi
+            done
+
+            # Verifica se esiste la cartella src
+            if [ -d "src" ]; then
+                echo "Copia il contenuto della cartella src dentro ${directoryName}/usr/local/bin/"
+                mkdir -p "$directoryName/usr/local/bin/"
+                # Copia il contenuto della cartella src dentro ${directoryName}/usr/local/bin/
+                cp -r src/* "$directoryName/usr/local/bin/"
+
+                echo "Assegna i permessi ai file"
+                # Assegna i permessi ai file
+                chmod 0755 "$directoryName/$debian/postinst" "$directoryName/$debian/preinst" "$directoryName/$debian/rules" 2>/dev/null
+                chmod 0644 "$directoryName/$debian/control" "$directoryName/$debian/compat"
+                chmod -R 755 "$directoryName/usr/local/bin/"
+                #esegue la build
+                dpkg-deb --build $directoryName
+
+            else
+                echo "Errore: la cartella src non esiste."
+                exit 1
+            fi
+        else
+            echo "Errore: una o più proprietà necessarie non sono presenti nel file env."
+            echo "package-name: $packageName"
+            echo "version: $version"
+            echo "author: $author"
+            echo "email: $email"
+            echo "description: $description"
+            exit 1
+        fi
+    else
+        echo "Errore: il file env non esiste."
+        exit 1
+    fi
+elif [ "$answer" == "no" ]; then
+    echo "'no' selezionato. Uscita..."
+else
+    # Gestisce input non validi
+    echo "Risposta non valida. Riprova a eseguire lo script."
+fi
