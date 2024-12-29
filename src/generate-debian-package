@@ -156,6 +156,8 @@ License: MIT
                 chmod 0644 "$directoryName/$debian/control" "$directoryName/$debian/install" "$directoryName/$debian/compat"
                 chmod -R 755 "$directoryName/src/"
 
+                ppaPath=$(grep -E '^ppa-path=' env | cut -d'=' -f2 | tr -d '\r')
+
                 echo "Enter the key to launch the build:"
                 read key
                 cd "$directoryName" && debuild -S -sa -k"$key" && cd ..
@@ -163,11 +165,12 @@ License: MIT
                 echo "Do you want to deploy on launchpad.net? (yY/n)"
                 read deployAnswer
                 if [[ "$deployAnswer" == "y" || "$deployAnswer" == "Y" ]]; then
-                    ppaPath=$(grep -E '^ppa-path=' env | cut -d'=' -f2 | tr -d '\r')
                     if [ -n "$ppaPath" ]; then
+                        cd "$directoryName"
                         echo "launch command: dput ppa:"$ppaPath" "${packageName}_${version}_source.changes""
                         dput ppa:"$ppaPath" "${packageName}_${version}_source.changes"
                         echo "Package successfully uploaded."
+                        cd ..
                     else
                         echo "Error: ppa-path property is not present in the env file."
                         exit 1
@@ -202,6 +205,8 @@ echo "Do you want to build the package manually? (yY/n)"
 read answer
 
 if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+
+
     # Checking if the env file exists
     echo "Checking if the env file exists"
     if [ -f "env" ]; then
