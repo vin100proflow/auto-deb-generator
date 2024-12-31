@@ -121,10 +121,11 @@ License: MIT
             distribution=$(grep -E '^distribution=' env | cut -d'=' -f2 | tr -d '\r')
             mainChange=$(grep -E '^mainChange=' env | cut -d'=' -f2 | tr -d '\r')
             minorChange=$(grep -E '^minorChange=' env | cut -d'=' -f2 | tr -d '\r')
+            urgency=$(grep -E '^urgency=' env | cut -d'=' -f2 | tr -d '\r')
 
-            if [ -n "$distribution" ] && [ -n "$mainChange" ]; then
+            if [ -n "$distribution" ] && [ -n "$mainChange" ] && [ -n "$urgency" ]; then
                 echo "Creating the changelog file"
-                echo "$packageName ($version) $distribution; urgency=low" >"$directoryName/$debian/changelog"
+                echo "$packageName ($version) $distribution; urgency=$urgency" >"$directoryName/$debian/changelog"
                 echo "  * $mainChange" >>"$directoryName/$debian/changelog"
                 if [ -n "$minorChange" ]; then
                     echo "   - $minorChange" >>"$directoryName/$debian/changelog"
@@ -132,6 +133,7 @@ License: MIT
                 echo " -- $author <$email>  $(date -R)" >>"$directoryName/$debian/changelog"
             else
                 echo "Error: One or more required properties are missing from the env file."
+                echo "urgency: $urgency"
                 echo "distribution: $distribution"
                 echo "mainChange: $mainChange"
                 echo "minorChange: $minorChange"
