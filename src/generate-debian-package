@@ -29,7 +29,7 @@ if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
         debian="debian"
         packageName=$(sed -n 's/^package-name=//p' env | tr -d '\r')
         version=$(sed -n 's/^version=//p' env | tr -d '\r')
-        directoryName="ppa/${packageName}.${version}"
+        directoryName="ppa/${packageName}-${version}"
 
         # Checks whether a folder named $directoryName already exists.
         if [ -d "$directoryName" ]; then
@@ -117,6 +117,14 @@ License: MIT
                 fi
             done
 
+            mkdir -p "$directoryName/$debian/source/"
+            if [ -f "format" ]; then
+                echo "Copying the format file into the $debian folder"
+                cp "format" "$directoryName/$debian/source/"
+            else
+                echo "Creating the format file with default contents"
+                echo "3.0 (native)" >"$directoryName/$debian/source/format"
+            fi
             # Creating the changelog file
             distribution=$(grep -E '^distribution=' env | cut -d'=' -f2 | tr -d '\r')
             mainChange=$(grep -E '^mainChange=' env | cut -d'=' -f2 | tr -d '\r')
@@ -144,7 +152,7 @@ License: MIT
 
             # Check if the src folder exists
             if [ -d "src" ]; then
-                echo "Copy the src folder into {$packageName$version}"
+                echo "Copy the src folder into {$directoryName}"
                 cp -r src "$directoryName/"
 
                 # Create the install file if it does not exist
@@ -162,13 +170,14 @@ License: MIT
 
                 echo "Enter the key to launch the build:"
                 read key
-                cd "$directoryName" && debuild -S -sa -k"$key" && cd ..
+                cd "$directoryName" && debuild -S -sa -k"$key"
 
                 echo "Do you want to deploy on launchpad.net? (yY/n)"
                 read deployAnswer
                 if [[ "$deployAnswer" == "y" || "$deployAnswer" == "Y" ]]; then
                     if [ -n "$ppaPath" ]; then
                         cd "$directoryName"
+                        cd ..
                         echo "launch command: dput ppa:"$ppaPath" "${packageName}_${version}_source.changes""
                         dput ppa:"$ppaPath" "${packageName}_${version}_source.changes"
                         echo "Package successfully uploaded."
@@ -179,6 +188,7 @@ License: MIT
                     fi
                 else
                     echo "Deploy not executed."
+                cd ../..
                 fi
             else
                 echo "Error: The src folder does not exist."
@@ -208,7 +218,6 @@ read answer
 
 if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
 
-
     # Checking if the env file exists
     echo "Checking if the env file exists"
     if [ -f "env" ]; then
@@ -218,7 +227,7 @@ if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
         # Reads the “package-name” and “version” properties from the env file
         packageName=$(sed -n 's/^package-name=//p' env | tr -d '\r')
         version=$(sed -n 's/^version=//p' env | tr -d '\r')
-        directoryName="manual/${packageName}.${version}"
+        directoryName="manual/${packageName}-${version}"
 
         # Checks whether a folder named $directoryName already exists.
         if [ -d "$directoryName" ]; then
