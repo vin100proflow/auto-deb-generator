@@ -1,0 +1,67 @@
+#!/bin/bash
+
+echo "Do you want to create a new Debian package? (yY/n)"
+read answer
+
+if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
+    echo "Enter the name of the package"
+    read package_name
+
+    if [ -d "$package_name" ]; then
+        echo "The folder $package_name already exists. Do you want to delete it? (y/n)"
+        read deleteAnswer
+        if [ "$deleteAnswer" == "y" ]; then
+            rm -rf "$package_name"
+            echo "Folder $package_name deleted."
+        else
+            echo "Operation canceled."
+            exit 1
+        fi
+    fi
+    echo "*"
+    echo "creating the package root directory 
+    $package_name/"
+    echo "*"
+    mkdir $package_name
+    cd $package_name
+    echo "creating the src/ directory in which you will put the source code of the package"
+
+    mkdir src
+    echo "*"
+    echo "creating the env file in which you will put the configuration of the package"
+    touch env
+    echo "*"
+    echo "
+# We suggest to delete all the ''comments'' before filling in the fields
+# Insert your project name separeted by hyphen
+package-name=<<package-name>>
+# Insert the version of the package. Remember to use the format x.x.x and to increment the number of the version for each new release
+version=<<version>>
+# Insert the urgency of the package: {low|medium|high|emergency}
+# The urgency is the priority of the package, if you are not sure, you can set it to low. We recommend that you set it to low, and then change it only if strictly necessary
+urgency=<<urgency>>
+# es. jammy, etc. look at the official Ubuntu website for the list of the available distributions
+distribution=<<distribution>>
+# Insert the main change of the package, required
+mainChange=
+# Insert the minor change of the package, optional
+minorChange=
+# Insert the name of the author
+author=<<Name Last Name>>
+# Insert the email of the author
+author-email=<<email.autore@example.com>>
+# Insert the dependencies of the package, optional
+depends=
+# Insert the description of the package
+description=<<description>>
+# Insert the path of the PPA where you want to upload the package, you'll find it in the PPA name on launchpad.net. es myPPAuser/myPPAname
+ppa-path=<<user-name/ppa-name>>" >>"env"
+
+    echo "the env file has been created, please fill in the fields with the necessary information"
+    echo "*"
+    echo "Now your package $package_name is ready to be configured, you can find the env file in the root directory of the package"
+    echo "*"
+    echo "Once you have filled in the fields, you can run the command 'generate-debian-package' inside the root directory to generate the package and even upload it to the PPA"
+else
+    echo "Exiting..."
+fi
