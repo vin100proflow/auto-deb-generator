@@ -29,67 +29,83 @@ if [[ "$answer" == "y" || "$answer" == "Y" ]]; then
         debian="debian"
         packageName=$(sed -n 's/^package-name=//p' env | tr -d '\r')
         version=$(sed -n 's/^version=//p' env | tr -d '\r')
-        directoryName="ppa/${packageName}-${version}"
 
-        # Checks whether a folder named $directoryName already exists.
-        if [ -d "$directoryName" ]; then
-            echo "The folder $directoryName already exists. Do you want to delete it? (y/n)"
-            read deleteAnswer
-            if [ "$deleteAnswer" == "y" ]; then
-                rm -rf "$directoryName"
-                echo "Folder $directoryName deleted."
-            else
-                echo "Operation canceled."
-                exit 1
-            fi
-        fi
+        echo "packageName: $packageName"
+        echo "version: $version"
+
         author=$(sed -n 's/^author=//p' env | tr -d '\r')
         email=$(sed -n 's/^author-email=//p' env | tr -d '\r')
         description=$(sed -n 's/^description=//p' env | tr -d '\r')
         depends=$(sed -n 's/^depends=//p' env | tr -d '\r')
         homepage=$(sed -n 's/^homepage=//p' env | tr -d '\r')
         upstreamName=$(sed -n 's/^upstream-name=//p' env | tr -d '\r')
+        distributions=($(grep -E '^distribution=' env | cut -d'=' -f2 | tr -d '\r'))
 
-        if [ -n "$packageName" ] && [ -n "$version" ] && [ -n "$author" ] && [ -n "$email" ] && [ -n "$description" ]; then
-            echo "packageName: $packageName"
-            echo "version: $version"
+        if [ -n "$packageName" ] && [ -n "$version" ] && [ -n "$author" ] && [ -n "$email" ] && [ -n "$description" ] && [ -n "$distributions" ]; then
+
             echo "Creating the folder $directoryName"
-            mkdir -p "$directoryName/$debian/"
-            # Verify and copy the files to the $debian folder
-            for file in compat rules control postinst preinstal install copyright; do
-                if [ -f "$file" ]; then
-                    echo "Copying $file into the $debian folder"
-                    cp "$file" "$directoryName/$debian/"
-                elif [[ "$file" == "compat" || "$file" == "rules" || "$file" == "control" || "$file" == "copyright" ]]; then
-                    # Creating $file with default contents if it does not exist
-                    echo "Creating $file with default contents"
-                    case "$file" in
-                    compat)
-                        echo "12" >>"$directoryName/$debian/$file"
-                        ;;
-                    rules)
-                        echo "#!/usr/bin/make -f
+            echo "Distributions found: ${distributions[@]}"
+            for dist in "${distributions[@]}"; do
+
+                packageVersion="${version}.${dist}"
+                echo "Do you want to build for $dist? (yY/n)"
+                read buildAnswer
+                if [[ "$buildAnswer" != "y" && "$buildAnswer" != "Y" ]]; then
+                    continue
+                fi
+
+                echo "Starting the build for $dist"
+                directoryName="ppa/${dist}/${packageName}-${packageVersion}"
+
+                # Checks whether a folder named $directoryName already exists.
+                if [ -d "$directoryName" ]; then
+                    echo "The folder $directoryName already exists. Do you want to delete it? (y/n)"
+                    read deleteAnswer
+                    if [ "$deleteAnswer" == "y" ]; then
+                        rm -rf "$directoryName"
+                        echo "Folder $directoryName deleted."
+                    else
+                        echo "Operation canceled."
+                        exit 1
+                    fi
+                fi
+
+                mkdir -p "$directoryName/$debian/"
+                # Verify and copy the files to the $debian folder
+                for file in compat rules control postinst preinstal install copyright; do
+                    if [ -f "$file" ]; then
+                        echo "Copying $file into the $debian folder"
+                        cp "$file" "$directoryName/$debian/"
+                    elif [[ "$file" == "compat" || "$file" == "rules" || "$file" == "control" || "$file" == "copyright" ]]; then
+                        # Creating $file with default contents if it does not exist
+                        echo "Creating $file with default contents"
+                        case "$file" in
+                        compat)
+                            echo "12" >>"$directoryName/$debian/$file"
+                            ;;
+                        rules)
+                            echo "#!/usr/bin/make -f
 %:
 	dh \$@" >>"$directoryName/$debian/$file"
-                        ;;
-                    control)
-                        echo "Source: $packageName" >>"$directoryName/$debian/$file"
-                        echo "Section: utils" >>"$directoryName/$debian/$file"
-                        echo "Priority: optional" >>"$directoryName/$debian/$file"
-                        echo "Maintainer: $author <$email>" >>"$directoryName/$debian/$file"
-                        echo "Build-Depends: debhelper (>= 12)" >>"$directoryName/$debian/$file"
-                        echo "Standards-Version: 4.5.0" >>"$directoryName/$debian/$file"
-                        echo "Homepage: $homepage" >>"$directoryName/$debian/$file"
-                        echo "" >>"$directoryName/$debian/$file"
-                        echo "Package: $packageName" >>"$directoryName/$debian/$file"
-                        echo "Architecture: all" >>"$directoryName/$debian/$file"
-                        echo "Description: $description" >>"$directoryName/$debian/$file"
-                        ;;
-                    copyright)
-                        echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
-                        echo "Upstream-Name: $upstreamName" >>"$directoryName/$debian/$file"
-                        echo "Source: $homepage" >>"$directoryName/$debian/$file"
-                        echo "Files: *
+                            ;;
+                        control)
+                            echo "Source: $packageName" >>"$directoryName/$debian/$file"
+                            echo "Section: utils" >>"$directoryName/$debian/$file"
+                            echo "Priority: optional" >>"$directoryName/$debian/$file"
+                            echo "Maintainer: $author <$email>" >>"$directoryName/$debian/$file"
+                            echo "Build-Depends: debhelper (>= 12)" >>"$directoryName/$debian/$file"
+                            echo "Standards-Version: 4.5.0" >>"$directoryName/$debian/$file"
+                            echo "Homepage: $homepage" >>"$directoryName/$debian/$file"
+                            echo "" >>"$directoryName/$debian/$file"
+                            echo "Package: $packageName" >>"$directoryName/$debian/$file"
+                            echo "Architecture: all" >>"$directoryName/$debian/$file"
+                            echo "Description: $description" >>"$directoryName/$debian/$file"
+                            ;;
+                        copyright)
+                            echo "Format: https://www.debian.org/doc/packaging-manuals/copyright-format/1.0/"
+                            echo "Upstream-Name: $upstreamName" >>"$directoryName/$debian/$file"
+                            echo "Source: $homepage" >>"$directoryName/$debian/$file"
+                            echo "Files: *
 Copyright: 2024 Vincent Legnani <vincent.legnani.biz@gmail.com>
 License: MIT
 
@@ -112,88 +128,88 @@ License: MIT
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  SOFTWARE.
 " >>"$directoryName/$debian/$file"
-                        ;;
-                    esac
+                            ;;
+                        esac
+                    fi
+                done
+
+                mkdir -p "$directoryName/$debian/source/"
+                if [ -f "format" ]; then
+                    echo "Copying the format file into the $debian folder"
+                    cp "format" "$directoryName/$debian/source/"
+                else
+                    echo "Creating the format file with default contents"
+                    echo "3.0 (native)" >"$directoryName/$debian/source/format"
                 fi
-            done
+                # Creating the changelog file
+                mainChange=$(grep -E '^mainChange=' env | cut -d'=' -f2 | tr -d '\r')
+                minorChange=$(grep -E '^minorChange=' env | cut -d'=' -f2 | tr -d '\r')
+                urgency=$(grep -E '^urgency=' env | cut -d'=' -f2 | tr -d '\r')
 
-            mkdir -p "$directoryName/$debian/source/"
-            if [ -f "format" ]; then
-                echo "Copying the format file into the $debian folder"
-                cp "format" "$directoryName/$debian/source/"
-            else
-                echo "Creating the format file with default contents"
-                echo "3.0 (native)" >"$directoryName/$debian/source/format"
-            fi
-            # Creating the changelog file
-            distribution=$(grep -E '^distribution=' env | cut -d'=' -f2 | tr -d '\r')
-            mainChange=$(grep -E '^mainChange=' env | cut -d'=' -f2 | tr -d '\r')
-            minorChange=$(grep -E '^minorChange=' env | cut -d'=' -f2 | tr -d '\r')
-            urgency=$(grep -E '^urgency=' env | cut -d'=' -f2 | tr -d '\r')
-
-            if [ -n "$distribution" ] && [ -n "$mainChange" ] && [ -n "$urgency" ]; then
-                echo "Creating the changelog file"
-                echo "$packageName ($version) $distribution; urgency=$urgency" >"$directoryName/$debian/changelog"
-                echo "  * $mainChange" >>"$directoryName/$debian/changelog"
-                if [ -n "$minorChange" ]; then
-                    echo "   - $minorChange" >>"$directoryName/$debian/changelog"
-                fi
-                echo " -- $author <$email>  $(date -R)" >>"$directoryName/$debian/changelog"
-            else
-                echo "Error: One or more required properties are missing from the env file."
-                echo "urgency: $urgency"
-                echo "distribution: $distribution"
-                echo "mainChange: $mainChange"
-                echo "minorChange: $minorChange"
-                echo "author: $author"
-                echo "email: $email"
-                exit 1
-            fi
-
-            # Check if the src folder exists
-            if [ -d "src" ]; then
-                echo "Copy the src folder into {$directoryName}"
-                cp -r src "$directoryName/"
-
-                # Create the install file if it does not exist
-                if [ ! -f "install" ]; then
-                    echo "Create the install file"
-                    write_install_entries "src" "src"
+                if [ -n "$distributions" ] && [ -n "$mainChange" ] && [ -n "$urgency" ]; then
+                    echo "Creating the changelog file"
+                    echo "$packageName ($packageVersion) $dist; urgency=$urgency" >>"$directoryName/$debian/changelog"
+                    echo "  * $mainChange" >>"$directoryName/$debian/changelog"
+                    if [ -n "$minorChange" ]; then
+                        echo "   - $minorChange" >>"$directoryName/$debian/changelog"
+                    fi
+                    echo " -- $author <$email>  $(date -R)" >>"$directoryName/$debian/changelog"
+                else
+                    echo "Error: One or more required properties are missing from the env file."
+                    echo "urgency: $urgency"
+                    echo "distribution: $distributions"
+                    echo "mainChange: $mainChange"
+                    echo "minorChange: $minorChange"
+                    echo "author: $author"
+                    echo "email: $email"
+                    exit 1
                 fi
 
-                echo "Assigning permissions to the files"
-                chmod 0755 "$directoryName/$debian/postinst" "$directoryName/$debian/preinst" "$directoryName/$debian/rules" 2>/dev/null
-                chmod 0644 "$directoryName/$debian/control" "$directoryName/$debian/install" "$directoryName/$debian/compat"
-                chmod -R 755 "$directoryName/src/"
+                # Check if the src folder exists
+                if [ -d "src" ]; then
+                    echo "Copy the src folder into {$directoryName}"
+                    cp -r src "$directoryName/"
 
-                ppaPath=$(grep -E '^ppa-path=' env | cut -d'=' -f2 | tr -d '\r')
+                    # Create the install file if it does not exist
+                    if [ ! -f "install" ]; then
+                        echo "Create the install file"
+                        write_install_entries "src" "src"
+                    fi
 
-                echo "Enter the key to launch the build:"
-                read key
-                cd "$directoryName" && debuild -S -sa -k"$key"
+                    echo "Assigning permissions to the files"
+                    chmod 0755 "$directoryName/$debian/postinst" "$directoryName/$debian/preinst" "$directoryName/$debian/rules" 2>/dev/null
+                    chmod 0644 "$directoryName/$debian/control" "$directoryName/$debian/install" "$directoryName/$debian/compat"
+                    chmod -R 755 "$directoryName/src/"
 
-                echo "Do you want to deploy on launchpad.net? (yY/n)"
-                read deployAnswer
-                if [[ "$deployAnswer" == "y" || "$deployAnswer" == "Y" ]]; then
-                    if [ -n "$ppaPath" ]; then
-                        cd "$directoryName"
-                        cd ..
-                        echo "launch command: dput ppa:"$ppaPath" "${packageName}_${version}_source.changes""
-                        dput ppa:"$ppaPath" "${packageName}_${version}_source.changes"
-                        echo "Package successfully uploaded."
-                        cd ..
+                    echo "Enter the key to launch the build:"
+                    read key
+                    cd "$directoryName" && debuild -S -sa -k"$key" && cd ../../..
+
+                    pwd
+                    ppaPath=$(grep -E "^ppa-path=" env | cut -d'=' -f2 | tr -d '\r')
+
+                    echo "Do you want to deploy on launchpad.net? (yY/n)"
+                    read deployAnswer
+                    if [[ "$deployAnswer" == "y" || "$deployAnswer" == "Y" ]]; then
+                        if [ -n "$ppaPath" ]; then
+                            cd "$directoryName"
+                            cd ..
+                            echo "launch command: dput ppa:"$ppaPath" "${packageName}_${packageVersion}_source.changes""
+                            dput ppa:"$ppaPath" "${packageName}_${packageVersion}_source.changes"
+                            echo "Package successfully uploaded."
+                            cd ../../
+                        else
+                            echo "Error: ppa-path property is not present in the env file."
+                            exit 1
+                        fi
                     else
-                        echo "Error: ppa-path property is not present in the env file."
-                        exit 1
+                        echo "Deploy not executed."
                     fi
                 else
-                    echo "Deploy not executed."
-                cd ../..
+                    echo "Error: The src folder does not exist."
+                    exit 1
                 fi
-            else
-                echo "Error: The src folder does not exist."
-                exit 1
-            fi
+            done
         else
             echo "Error: One or more required properties are missing from the env file."
             echo "package-name: $packageName"
@@ -203,6 +219,7 @@ License: MIT
             echo "description: $description"
             exit 1
         fi
+
     else
         echo "Error: env file does not exist."
         exit 1
